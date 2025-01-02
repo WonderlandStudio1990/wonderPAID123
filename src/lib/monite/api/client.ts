@@ -1,5 +1,7 @@
 import axios, { AxiosInstance, AxiosRequestConfig, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import axiosRetry from 'axios-retry';
+import { Metrics } from '../monitoring/metrics';
+import { ErrorTracker } from '../monitoring/error-tracker';
 
 interface MoniteToken {
     access_token: string;
@@ -35,6 +37,8 @@ export class MoniteApiClient {
     private accessToken: string | null = null;
     private tokenExpiry: number | null = null;
     private readonly config: Required<MoniteApiClientConfig>;
+    private metrics: Metrics;
+    private errorTracker: ErrorTracker;
 
     constructor(config: MoniteApiClientConfig) {
         this.config = {
@@ -89,6 +93,29 @@ export class MoniteApiClient {
         this.axiosInstance.interceptors.response.use(
             (response: AxiosResponse) => response,
             (error: AxiosError) => Promise.reject(this.handleError(error))
+        );
+
+        this.metrics = new Metrics();
+        this.errorTracker = new ErrorTracker();
+
+        // Add response interceptor for monitoring
+        this.axiosInstance.interceptors.response.use(
+            (response) => {
+                const duration = Date.now() - response.config.metadata.startTime;
+                this.metrics.recordApiLatency(
+                    response.config.url!,
+                    response.config.method!,
+                    duration / 1000
+                );
+                return response;
+            },
+            (error) => {
+                this.errorTracker.trackError(error, {
+                    url: error.config?.url,
+                    method: error.config?.method
+                });
+                return Promise.reject(error);
+            }
         );
     }
 
