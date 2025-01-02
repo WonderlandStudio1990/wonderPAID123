@@ -1,31 +1,16 @@
-import { Metrics } from './metrics';
-import { Tracer } from './tracer';
+export * from './metrics';
+export * from './error-tracking';
+export * from './integration-monitor';
+export * from './database-monitor';
 
-export class Monitoring {
-  private static instance: Monitoring;
-  private metrics: Metrics;
-  private tracer: Tracer;
+// Re-export instances for convenience
+export { default as metricsCollector } from './metrics';
+export { default as errorTracker } from './error-tracking';
+export { default as databaseMonitor } from './database-monitor';
 
-  private constructor() {
-    this.metrics = new Metrics();
-    this.tracer = new Tracer();
-  }
-
-  static getInstance(): Monitoring {
-    if (!Monitoring.instance) {
-      Monitoring.instance = new Monitoring();
-    }
-    return Monitoring.instance;
-  }
-
-  recordApiCall(path: string, method: string, status: number, duration: number) {
-    this.metrics.incrementApiCalls(path, method, status);
-    this.metrics.recordApiLatency(path, method, duration);
-  }
-
-  startSpan(name: string) {
-    return this.tracer.startSpan(name);
-  }
-}
-
-export const monitoring = Monitoring.getInstance();
+// Export logger instances
+export {
+  monitoringLogger,
+  moniteLogger,
+  dbLogger,
+} from './logger';
