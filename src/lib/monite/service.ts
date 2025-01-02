@@ -1,51 +1,75 @@
-import { createClient } from '@supabase/supabase-js';
-import { MoniteEntityCreate } from '@/lib/monite/types';
-import { EntityService } from '@/lib/monite/services/entity.service';
+import { MoniteApiClient } from './api/client';
+
+interface MoniteEntitySettings {
+  currency: string;
+  timezone: string;
+}
+
+interface MoniteEntityMetadata {
+  user_id: string;
+  email: string | null;
+  created_at: string;
+}
+
+interface CreateEntityParams {
+  name: string;
+  type: 'individual' | 'organization';
+  status: 'active' | 'inactive';
+  metadata?: MoniteEntityMetadata;
+  settings?: MoniteEntitySettings;
+}
 
 export class MoniteService {
-    private supabaseClient;
-    private entityService: EntityService;
+  private readonly apiClient: MoniteApiClient;
 
-    constructor(
-        private apiUrl: string,
-        private clientId: string,
-        private clientSecret: string
-    ) {
-        this.supabaseClient = createClient(
-            process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL!,
-            process.env.SUPABASE_SERVICE_ROLE_KEY!,
-            {
-                auth: {
-                    autoRefreshToken: false,
-                    persistSession: false
-                }
-            }
-        );
-        this.entityService = new EntityService(this.supabaseClient);
-    }
+  constructor(
+    baseURL: string,
+    clientId: string,
+    clientSecret: string
+  ) {
+    this.apiClient = new MoniteApiClient({
+      baseURL,
+      clientId,
+      clientSecret,
+      timeout: 10000,
+      maxRetries: 3
+    });
+  }
 
-    setSession(session: { user: any }) {
-        // Implement session management
-        console.log('Setting session for user:', session.user.id);
-    }
+  async createEntity(params: CreateEntityParams) {
+    return this.apiClient.request({
+      method: 'POST',
+      url: '/v1/entities',
+      data: params
+    });
+  }
 
-    async createEntity(data: MoniteEntityCreate) {
-        return await this.entityService.createEntity(data);
-    }
+  async getEntity(entityId: string) {
+    return this.apiClient.request({
+      method: 'GET',
+      url: `/v1/entities/${entityId}`
+    });
+  }
 
-    async getEntity(id: string) {
-        return await this.entityService.getEntity(id);
-    }
+  async updateEntity(entityId: string, params: Partial<CreateEntityParams>) {
+    return this.apiClient.request({
+      method: 'PATCH',
+      url: `/v1/entities/${entityId}`,
+      data: params
+    });
+  }
 
-    async listEntities() {
-        return await this.entityService.listEntities();
-    }
+  async deleteEntity(entityId: string) {
+    return this.apiClient.request({
+      method: 'DELETE',
+      url: `/v1/entities/${entityId}`
+    });
+  }
 
-    async updateEntity(id: string, data: Partial<MoniteEntityCreate>) {
-        return await this.entityService.updateEntity(id, data);
-    }
-
-    async deleteEntity(id: string) {
-        return await this.entityService.deleteEntity(id);
-    }
-} 
+  async listEntities() {
+    return this.apiClient.request({
+      method: 'GET',
+      url: '/v1/entities'
+    });
+  }
+}

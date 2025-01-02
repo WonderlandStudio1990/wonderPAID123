@@ -15,11 +15,15 @@ export function useEntity() {
         process.env.NEXT_PUBLIC_MONITE_CLIENT_SECRET!
     );
 
-    const createEntity = useCallback(async (data: MoniteEntityCreate): Promise<MoniteEntity | null> => {
+    const createEntity = useCallback(async (data: Omit<MoniteEntityCreate, 'status'> & { status?: 'active' | 'inactive' }): Promise<MoniteEntity | null> => {
         setLoading(true);
         setError(null);
         try {
-            const entity = await moniteService.createEntity(data);
+            const entityData = {
+                ...data,
+                status: data.status || 'active'
+            };
+            const entity = await moniteService.createEntity(entityData) as MoniteEntity;
             return entity;
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to create entity'));
@@ -33,7 +37,7 @@ export function useEntity() {
         setLoading(true);
         setError(null);
         try {
-            const entity = await moniteService.getEntity(id);
+            const entity = await moniteService.getEntity(id) as MoniteEntity;
             return entity;
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to get entity'));
@@ -47,7 +51,7 @@ export function useEntity() {
         setLoading(true);
         setError(null);
         try {
-            const entities = await moniteService.listEntities();
+            const { data: entities } = await moniteService.listEntities() as { data: MoniteEntity[] };
             return entities;
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to list entities'));
@@ -57,14 +61,11 @@ export function useEntity() {
         }
     }, [moniteService]);
 
-    const updateEntity = useCallback(async (
-        id: string,
-        data: Partial<MoniteEntityCreate>
-    ): Promise<MoniteEntity | null> => {
+    const updateEntity = useCallback(async (id: string, data: Partial<MoniteEntityCreate>): Promise<MoniteEntity | null> => {
         setLoading(true);
         setError(null);
         try {
-            const entity = await moniteService.updateEntity(id, data);
+            const entity = await moniteService.updateEntity(id, data) as MoniteEntity;
             return entity;
         } catch (err) {
             setError(err instanceof Error ? err : new Error('Failed to update entity'));
@@ -95,6 +96,6 @@ export function useEntity() {
         getEntity,
         listEntities,
         updateEntity,
-        deleteEntity,
+        deleteEntity
     };
 } 

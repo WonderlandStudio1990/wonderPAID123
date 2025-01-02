@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useSupabaseClient } from '@supabase/auth-helpers-react';
-import { APIClient } from '../api/client';
-import { MoniteCustomConfig } from '../monite/api/types';
+import { MoniteApiClient } from '../monite/api/client';
 
 interface AuthError {
   message: string;
@@ -14,18 +13,13 @@ export function useAuth() {
   const supabase = useSupabaseClient();
 
   const getApiClient = useCallback(() => {
-    const moniteConfig: MoniteCustomConfig = {
-      baseUrl: process.env.NEXT_PUBLIC_MONITE_API_URL!,
+    return new MoniteApiClient({
+      baseURL: process.env.NEXT_PUBLIC_MONITE_API_URL!,
       clientId: process.env.NEXT_PUBLIC_MONITE_CLIENT_ID!,
       clientSecret: process.env.NEXT_PUBLIC_MONITE_CLIENT_SECRET!,
-      apiVersion: process.env.PUBLIC_MONITE_VERSION!,
-    };
-
-    return new APIClient(
-      moniteConfig,
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
+      timeout: 10000,
+      maxRetries: 3
+    });
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
@@ -48,7 +42,7 @@ export function useAuth() {
         status: 400,
       };
       setError(error);
-      return null;
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -71,10 +65,10 @@ export function useAuth() {
     } catch (err) {
       const error = {
         message: err instanceof Error ? err.message : 'Failed to sign in',
-        status: 400,
+        status: 401,
       };
       setError(error);
-      return null;
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -89,15 +83,13 @@ export function useAuth() {
       if (signOutError) {
         throw new Error(signOutError.message);
       }
-
-      return true;
     } catch (err) {
       const error = {
         message: err instanceof Error ? err.message : 'Failed to sign out',
-        status: 400,
+        status: 500,
       };
       setError(error);
-      return false;
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -107,20 +99,20 @@ export function useAuth() {
     setLoading(true);
     setError(null);
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email);
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${process.env.NEXT_PUBLIC_BASE_URL}/auth/reset-password`,
+      });
 
       if (resetError) {
         throw new Error(resetError.message);
       }
-
-      return true;
     } catch (err) {
       const error = {
         message: err instanceof Error ? err.message : 'Failed to reset password',
         status: 400,
       };
       setError(error);
-      return false;
+      throw error;
     } finally {
       setLoading(false);
     }
@@ -133,5 +125,6 @@ export function useAuth() {
     signIn,
     signOut,
     resetPassword,
+    getApiClient,
   };
 } 

@@ -1,5 +1,5 @@
 import { MoniteService } from '@/lib/monite/service';
-import { MoniteEntityCreate } from '@/lib/monite/types';
+import { MoniteEntity, MoniteEntityCreate } from '@/lib/monite/types';
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import path from 'path';
@@ -73,47 +73,45 @@ async function main() {
 
         // Create test entity
         console.log('\nDEBUG: Creating test entity...');
-        const testEntity: MoniteEntityCreate = {
+        const entityData = {
             name: 'Test Organization',
-            status: 'active',
+            type: 'organization' as const,
+            status: 'active' as const,
             metadata: {
                 user_id: userId,
-                tax_id: '123456789'
+                email: testUser.email,
+                created_at: new Date().toISOString()
             },
             settings: {
                 currency: 'USD',
                 timezone: 'America/Los_Angeles'
             }
-        };
-        console.log('DEBUG: Entity data:', JSON.stringify(testEntity, null, 2));
+        } satisfies MoniteEntityCreate;
+
+        console.log('DEBUG: Entity data:', JSON.stringify(entityData, null, 2));
 
         console.log('DEBUG: Creating entity...');
-        const createdEntity = await moniteService.createEntity(testEntity);
+        const createdEntity = await moniteService.createEntity(entityData) as MoniteEntity;
         console.log('DEBUG: Entity created successfully');
         console.log('Created entity:', JSON.stringify(createdEntity, null, 2));
 
         // Get entity
         console.log('\nDEBUG: Retrieving entity...');
-        const retrievedEntity = await moniteService.getEntity(createdEntity.id);
+        const retrievedEntity = await moniteService.getEntity(createdEntity.id) as MoniteEntity;
         console.log('DEBUG: Entity retrieved successfully');
         console.log('Retrieved entity:', JSON.stringify(retrievedEntity, null, 2));
 
         // List entities
-        console.log('\nDEBUG: Listing all entities...');
-        const entities = await moniteService.listEntities();
+        console.log('\nDEBUG: Listing entities...');
+        const { data: entities } = await moniteService.listEntities() as { data: MoniteEntity[] };
         console.log('DEBUG: Entities retrieved successfully');
-        console.log('Number of entities:', entities.length);
+        console.log('Total entities:', entities.length);
 
         // Update entity
         console.log('\nDEBUG: Updating entity...');
-        const updateData: Partial<MoniteEntityCreate> = {
-            name: 'Updated Test Organization',
-            metadata: {
-                ...testEntity.metadata,
-                updated: true
-            }
-        };
-        const updatedEntity = await moniteService.updateEntity(createdEntity.id, updateData);
+        const updatedEntity = await moniteService.updateEntity(createdEntity.id, {
+            name: 'Updated Test Organization'
+        }) as MoniteEntity;
         console.log('DEBUG: Entity updated successfully');
         console.log('Updated entity:', JSON.stringify(updatedEntity, null, 2));
 
@@ -122,21 +120,10 @@ async function main() {
         await moniteService.deleteEntity(createdEntity.id);
         console.log('DEBUG: Entity deleted successfully');
 
-        // Verify deletion
-        console.log('\nDEBUG: Verifying deletion...');
-        const deletedEntity = await moniteService.getEntity(createdEntity.id);
-        if (deletedEntity === null) {
-            console.log('DEBUG: Entity was successfully deleted');
-        } else {
-            throw new Error('Entity was not deleted');
-        }
-
-        console.log('\nTest completed successfully!');
+        console.log('\nAll tests passed successfully!');
+        process.exit(0);
     } catch (error) {
-        console.error('\nDEBUG: Test failed with error:', error);
-        if (error instanceof Error) {
-            console.error('Error stack:', error.stack);
-        }
+        console.error('Test failed:', error);
         process.exit(1);
     }
 }

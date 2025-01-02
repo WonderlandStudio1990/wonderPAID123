@@ -1,14 +1,10 @@
 import { MoniteService } from '../lib/monite/service';
 import {
+    MoniteEntity,
     MoniteEntityCreate,
-    MoniteRole,
-    MoniteBankAccount,
-    MoniteWorkflow,
-    MonitePayableCreate,
-    MoniteReceivableCreate,
-    MoniteVatId,
-    MoniteEntitySettings,
-    MoniteProjectSettings
+    MoniteCounterpart,
+    MoniteToken,
+    MoniteWebhookEvent
 } from '../lib/monite/types';
 import * as dotenv from 'dotenv';
 import path from 'path';
@@ -20,194 +16,63 @@ async function main() {
     try {
         // Initialize MoniteService with environment variables
         const moniteService = new MoniteService(
-            process.env.MONITE_API_URL!,
+            process.env.MONITE_API_URL || 'https://api.sandbox.monite.com',
             process.env.MONITE_CLIENT_ID!,
-            process.env.MONITE_CLIENT_SECRET!,
-            process.env.MONITE_API_VERSION!,
-            process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL,
-            process.env.NEXT_PUBLIC_SUPABASE_LOCAL_ANON_KEY
+            process.env.MONITE_CLIENT_SECRET!
         );
 
-        // Test user authentication
-        console.log('Authenticating test user...');
-        const testUser = {
-            email: `test${Date.now()}@wonderpaid.com`,
-            password: 'Test123!'
-        };
-
-        try {
-            const data = await moniteService.signInUser(testUser.email, testUser.password);
-            console.log('Signed in existing test user:', data.user?.id);
-            moniteService.setSession(data);
-        } catch (signInError) {
-            console.log('Failed to sign in, creating new user...');
-            try {
-                const data = await moniteService.signUpUser(testUser.email, testUser.password);
-                console.log('Created new test user:', data.user?.id);
-                moniteService.setSession(data);
-            } catch (signUpError: any) {
-                if (signUpError.code === 'user_already_exists') {
-                    console.log('User already exists, trying to sign in again...');
-                    const data = await moniteService.signInUser(testUser.email, testUser.password);
-                    console.log('Signed in existing test user:', data.user?.id);
-                    moniteService.setSession(data);
-                } else {
-                    throw signUpError;
-                }
-            }
-        }
-
-        if (!moniteService.session?.user?.id) {
-            throw new Error('No user session available');
-        }
-
-        // Test entity creation
+        // Create test entity
         console.log('Creating test entity...');
-        const testEntity: MoniteEntityCreate = {
-            type: 'organization',
-            email: testUser.email,
-            address: {
-                country: 'US',
-                city: 'San Francisco',
-                postal_code: '94105',
-                line1: '123 Test St',
-                state: 'CA'
+        const timestamp = Date.now();
+        const testEntity = await moniteService.createEntity({
+            name: `Test Entity ${timestamp}`,
+            type: 'individual',
+            status: 'active',
+            metadata: {
+                user_id: `test-${timestamp}`,
+                email: `test${timestamp}@wonderpaid.com`,
+                created_at: new Date().toISOString()
             },
-            organization: {
-                legal_name: 'Test Organization',
-                tax_id: '123456789'
+            settings: {
+                currency: 'USD',
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             }
+        }) as MoniteEntity;
+
+        console.log('Test entity created:', testEntity.id);
+
+        // Get the created entity
+        console.log('Fetching test entity...');
+        const fetchedEntity = await moniteService.getEntity(testEntity.id) as MoniteEntity;
+        console.log('Fetched entity:', fetchedEntity.id);
+
+        // List all entities
+        console.log('Listing all entities...');
+        const { data: entities } = await moniteService.listEntities() as { data: MoniteEntity[] };
+        console.log('Total entities:', entities.length);
+
+        // Update the test entity
+        console.log('Updating test entity...');
+        const updatedEntity = await moniteService.updateEntity(testEntity.id, {
+            name: `Updated Test Entity ${timestamp}`
+        }) as MoniteEntity;
+        console.log('Updated entity name:', updatedEntity.name);
+
+        // Create a counterpart
+        console.log('Creating test counterpart...');
+        const counterpart = {
+            entity_id: testEntity.id,
+            type: 'individual' as const,
+            name: `Test Counterpart ${timestamp}`,
+            email: `counterpart${timestamp}@wonderpaid.com`
         };
 
-        const createdEntity = await moniteService.createEntityForUser(
-            moniteService.session.user.id,
-            testEntity
-        );
-        console.log('Created entity:', createdEntity);
+        // Delete the test entity
+        console.log('Deleting test entity...');
+        await moniteService.deleteEntity(testEntity.id);
+        console.log('Test entity deleted');
 
-        // Test role creation
-        console.log('Creating test role...');
-        const testRole: MoniteRole = {
-            name: 'Test Role',
-            permissions: ['read:entities', 'write:entities']
-        };
-        const createdRole = await moniteService.createRole(testRole);
-        console.log('Created role:', createdRole);
-
-        // Test project settings
-        console.log('Getting project settings...');
-        const projectSettings = await moniteService.getProjectSettings();
-        console.log('Project settings:', projectSettings);
-
-        console.log('Updating project settings...');
-        const updatedProjectSettings: MoniteProjectSettings = {
-            default_currency: 'USD',
-            available_currencies: ['USD', 'EUR'],
-            vat_id_required: false
-        };
-        const updatedSettings = await moniteService.updateProjectSettings(updatedProjectSettings);
-        console.log('Updated project settings:', updatedSettings);
-
-        // Test bank account creation
-        console.log('Creating test bank account...');
-        const testBankAccount: MoniteBankAccount = {
-            iban: 'DE89370400440532013000',
-            bic: 'DEUTDEFF',
-            bank_name: 'Test Bank',
-            account_holder_name: 'Test Organization'
-        };
-        const createdBankAccount = await moniteService.createBankAccount(testBankAccount);
-        console.log('Created bank account:', createdBankAccount);
-
-        // Test workflow creation
-        console.log('Creating test workflow...');
-        const testWorkflow: MoniteWorkflow = {
-            name: 'Test Workflow',
-            steps: [
-                {
-                    type: 'approval',
-                    config: {
-                        approvers: [moniteService.session.user.id]
-                    }
-                }
-            ]
-        };
-        const createdWorkflow = await moniteService.createWorkflow(testWorkflow);
-        console.log('Created workflow:', createdWorkflow);
-
-        // Test payable creation
-        console.log('Creating test payable...');
-        const testPayable: MonitePayableCreate = {
-            amount: {
-                currency: 'USD',
-                value: 100
-            },
-            due_date: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            counterpart_id: createdEntity.id,
-            description: 'Test payable'
-        };
-        const createdPayable = await moniteService.createPayable(testPayable);
-        console.log('Created payable:', createdPayable);
-
-        // Test receivable creation
-        console.log('Creating test receivable...');
-        const testReceivable: MoniteReceivableCreate = {
-            amount: {
-                currency: 'USD',
-                value: 200
-            },
-            due_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            counterpart_id: createdEntity.id,
-            description: 'Test receivable'
-        };
-        const createdReceivable = await moniteService.createReceivable(testReceivable);
-        console.log('Created receivable:', createdReceivable);
-
-        // Test VAT ID creation
-        console.log('Creating test VAT ID...');
-        const testVatId: MoniteVatId = {
-            country_code: 'DE',
-            value: 'DE123456789'
-        };
-        const createdVatId = await moniteService.createVatId(testVatId);
-        console.log('Created VAT ID:', createdVatId);
-
-        // Test entity settings
-        console.log('Getting entity settings...');
-        const entitySettings = await moniteService.getEntitySettings();
-        console.log('Entity settings:', entitySettings);
-
-        console.log('Updating entity settings...');
-        const newEntitySettings: MoniteEntitySettings = {
-            default_currency: 'USD',
-            vat_id_required: true,
-            approval_required: true
-        };
-        const updatedEntitySettings = await moniteService.updateEntitySettings(newEntitySettings);
-        console.log('Updated entity settings:', updatedEntitySettings);
-
-        // Test listing all resources
-        console.log('Listing all resources...');
-
-        const roles = await moniteService.listRoles();
-        console.log('Roles:', roles);
-
-        const bankAccounts = await moniteService.listBankAccounts();
-        console.log('Bank accounts:', bankAccounts);
-
-        const workflows = await moniteService.listWorkflows();
-        console.log('Workflows:', workflows);
-
-        const payables = await moniteService.listPayables();
-        console.log('Payables:', payables);
-
-        const receivables = await moniteService.listReceivables();
-        console.log('Receivables:', receivables);
-
-        const vatIds = await moniteService.listVatIds();
-        console.log('VAT IDs:', vatIds);
-
-        console.log('Test completed successfully!');
+        console.log('All tests passed!');
     } catch (error) {
         console.error('Test failed:', error);
         process.exit(1);

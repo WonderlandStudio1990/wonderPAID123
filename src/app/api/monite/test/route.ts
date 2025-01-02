@@ -47,12 +47,12 @@ export async function GET() {
 
     // Create a test entity
     const testEntity = await moniteService.createEntity({
-      name: `Test Entity - ${user.email}`,
+      name: `Test Entity - ${user.email || 'Unknown'}`,
+      type: 'individual',
       status: 'active',
       metadata: {
         user_id: user.id,
-        email: user.email,
-        test: true,
+        email: user.email || null,
         created_at: new Date().toISOString()
       },
       settings: {
@@ -62,7 +62,7 @@ export async function GET() {
     });
 
     // Get all entities for the user
-    const entities = await moniteService.listEntities();
+    const { data: entities } = await moniteService.listEntities() as { data: unknown[] };
 
     return NextResponse.json({
       message: 'Monite API test successful',
@@ -70,7 +70,7 @@ export async function GET() {
       existingEntities: entities,
       user: {
         id: user.id,
-        email: user.email
+        email: user.email || null
       }
     });
   } catch (error) {

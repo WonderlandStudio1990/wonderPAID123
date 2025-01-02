@@ -1,5 +1,5 @@
 import { AuthService } from '@/lib/services/auth.service';
-import { MoniteEntityCreate } from '@/lib/monite/types';
+import { MoniteEntity, MoniteEntityCreate } from '@/lib/monite/types';
 import * as dotenv from 'dotenv';
 import path from 'path';
 
@@ -7,8 +7,12 @@ import path from 'path';
 dotenv.config({ path: path.resolve(process.cwd(), '.env.local') });
 
 // Map environment variables correctly for local development
-process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_LOCAL_SERVICE_ROLE_KEY;
-process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL;
+if (process.env.SUPABASE_LOCAL_SERVICE_ROLE_KEY) {
+  process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_LOCAL_SERVICE_ROLE_KEY;
+}
+if (process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL) {
+  process.env.NEXT_PUBLIC_SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL;
+}
 
 // Debug environment variables
 console.log('Environment check:');
@@ -31,10 +35,19 @@ async function setupMoniteOrganization() {
     console.log('Creating entity...');
     const entity = await authService.getMoniteService().createEntity({
       name: `WonderPAID Test Org ${timestamp}`,
+      type: 'individual',
       status: 'active',
-      metadata: { user_id: user.id, email },
-      settings: { currency: 'USD', timezone: 'UTC' }
-    });
+      metadata: {
+        user_id: user.id,
+        email: email,
+        created_at: new Date().toISOString()
+      },
+      settings: {
+        currency: 'USD',
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+      }
+    }) as MoniteEntity;
+
     if (!entity) throw new Error('Failed to create entity');
 
     console.log('Storing entity...');
@@ -48,22 +61,16 @@ async function setupMoniteOrganization() {
       }]);
     
     if (error) {
-      console.error('Database error:', error);
       throw error;
     }
 
-    console.log('\nSuccess!');
-    console.log('Email:', email);
+    console.log('Setup completed successfully!');
     console.log('User ID:', user.id);
     console.log('Entity ID:', entity.id);
-    
-    return { user, entity, session };
   } catch (error) {
-    console.error('Failed:', error);
-    throw error;
+    console.error('Setup failed:', error);
+    process.exit(1);
   }
 }
 
-setupMoniteOrganization()
-  .then(() => process.exit(0))
-  .catch(() => process.exit(1));
+setupMoniteOrganization();

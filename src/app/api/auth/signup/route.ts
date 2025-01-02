@@ -84,10 +84,11 @@ export async function POST(request: Request) {
       // Create a Monite entity for the user
       const entity = await moniteService.createEntity({
         name: name || email.split('@')[0],
+        type: 'individual',
         status: 'active',
         metadata: {
           user_id: authData.user.id,
-          email: authData.user.email,
+          email: authData.user.email || null,
           created_at: new Date().toISOString()
         },
         settings: {
@@ -98,18 +99,17 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         user: authData.user,
-        entity,
-        message: 'Please check your email to verify your account'
+        entity
       });
-    } catch (entityError) {
+    } catch (error) {
       // If entity creation fails, delete the user
       await supabase.auth.admin.deleteUser(authData.user.id);
-      throw entityError;
+      throw error;
     }
   } catch (error) {
     console.error('Signup error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Internal server error' },
+      { error: 'Failed to create account' },
       { status: 500 }
     );
   }

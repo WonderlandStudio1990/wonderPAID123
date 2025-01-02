@@ -1,4 +1,5 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosError, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import axiosRetry from 'axios-retry';
 
 interface MoniteToken {
     access_token: string;
@@ -6,34 +7,69 @@ interface MoniteToken {
     token_type: string;
 }
 
+interface MoniteErrorResponse {
+    message: string;
+    code: string;
+    details?: unknown;
+}
+
 interface MoniteApiError extends Error {
     code: string;
     status?: number;
     details?: unknown;
+    retryCount?: number;
+}
+
+interface MoniteApiClientConfig {
+    baseURL: string;
+    clientId: string;
+    clientSecret: string;
+    apiVersion?: string;
+    timeout?: number;
+    maxRetries?: number;
+    retryDelay?: number;
 }
 
 export class MoniteApiClient {
     private axiosInstance: AxiosInstance;
     private accessToken: string | null = null;
     private tokenExpiry: number | null = null;
+    private readonly config: Required<MoniteApiClientConfig>;
 
-    constructor(
-        private readonly baseURL: string,
-        private readonly clientId: string,
-        private readonly clientSecret: string,
-        private readonly apiVersion: string = '2024-01-31'
-    ) {
+    constructor(config: MoniteApiClientConfig) {
+        this.config = {
+            apiVersion: '2024-01-31',
+            timeout: 30000,
+            maxRetries: 3,
+            retryDelay: 1000,
+            ...config
+        };
+
         this.axiosInstance = axios.create({
-            baseURL,
+            baseURL: this.config.baseURL,
+            timeout: this.config.timeout,
             headers: {
-                'x-monite-version': apiVersion,
+                'x-monite-version': this.config.apiVersion,
                 'Content-Type': 'application/json',
             },
         });
 
+        // Configure retry behavior
+        axiosRetry(this.axiosInstance, {
+            retries: this.config.maxRetries,
+            retryDelay: (retryNumber: number) => {
+                return retryNumber * this.config.retryDelay;
+            },
+            retryCondition: (error: AxiosError) => {
+                // Retry on network errors or 5xx server errors
+                return axiosRetry.isNetworkOrIdempotentRequestError(error) || 
+                       (error.response?.status ? error.response.status >= 500 : false);
+            }
+        });
+
         // Add request interceptor for auth token
         this.axiosInstance.interceptors.request.use(
-            async (config) => {
+            async (config: InternalAxiosRequestConfig) => {
                 try {
                     if (this.shouldRefreshToken()) {
                         await this.refreshToken();
@@ -46,13 +82,13 @@ export class MoniteApiClient {
                     return Promise.reject(this.handleError(error));
                 }
             },
-            (error) => Promise.reject(this.handleError(error))
+            (error: AxiosError) => Promise.reject(this.handleError(error))
         );
 
         // Add response interceptor for error handling
         this.axiosInstance.interceptors.response.use(
-            (response) => response,
-            (error) => Promise.reject(this.handleError(error))
+            (response: AxiosResponse) => response,
+            (error: AxiosError) => Promise.reject(this.handleError(error))
         );
     }
 
@@ -65,9 +101,14 @@ export class MoniteApiClient {
     private async refreshToken(): Promise<void> {
         try {
             const response = await this.axiosInstance.post<MoniteToken>('/v1/auth/token', {
-                client_id: this.clientId,
-                client_secret: this.clientSecret,
+                client_id: this.config.clientId,
+                client_secret: this.config.clientSecret,
                 grant_type: 'client_credentials',
+            }, {
+                // Don't retry token refresh requests
+                'axios-retry': {
+                    retries: 0
+                }
             });
 
             this.accessToken = response.data.access_token;
@@ -81,10 +122,18 @@ export class MoniteApiClient {
 
     private handleError(error: unknown): MoniteApiError {
         if (axios.isAxiosError(error)) {
-            const apiError = new Error(error.response?.data?.message || error.message) as MoniteApiError;
-            apiError.code = error.response?.data?.code || 'API_ERROR';
-            apiError.status = error.response?.status;
-            apiError.details = error.response?.data;
+            const axiosError = error as AxiosError<MoniteErrorResponse>;
+            const retryCount = axiosError.config?.['axios-retry']?.retryCount as number || 0;
+            const errorResponse = axiosError.response?.data;
+            
+            const apiError = new Error(
+                errorResponse?.message || axiosError.message
+            ) as MoniteApiError;
+            
+            apiError.code = errorResponse?.code || 'API_ERROR';
+            apiError.status = axiosError.response?.status;
+            apiError.details = errorResponse?.details;
+            apiError.retryCount = retryCount;
             return apiError;
         }
 
@@ -99,7 +148,6 @@ export class MoniteApiClient {
         return apiError;
     }
 
-    // Helper method for custom requests
     public async request<T>(config: AxiosRequestConfig): Promise<T> {
         try {
             const response = await this.axiosInstance.request<T>(config);
@@ -109,22 +157,18 @@ export class MoniteApiClient {
         }
     }
 
-    // Get the current access token
     public getAccessToken(): string | null {
         return this.accessToken;
     }
 
-    // Get the token expiry timestamp
     public getTokenExpiry(): number | null {
         return this.tokenExpiry;
     }
 
-    // Force token refresh
     public async forceTokenRefresh(): Promise<void> {
         await this.refreshToken();
     }
 
-    // Get the axios instance for direct use
     public getAxiosInstance(): AxiosInstance {
         return this.axiosInstance;
     }

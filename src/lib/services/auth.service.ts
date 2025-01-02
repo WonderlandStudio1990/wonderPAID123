@@ -8,6 +8,7 @@ import {
 } from '@supabase/supabase-js';
 import { MoniteService } from '@/lib/monite/service';
 import { MoniteApiClient } from '@/lib/monite/api/client';
+import { RateLimiter } from '@/lib/utils/rate-limiter';
 
 // Define proper response types
 interface AuthSignUpResponse {
@@ -37,17 +38,26 @@ export class AuthService {
   private readonly moniteService: MoniteService;
   private readonly moniteApiClient: MoniteApiClient;
   private readonly supabaseClient: SupabaseClient;
+  private readonly rateLimiter: RateLimiter;
 
   private constructor() {
     try {
       this.validateConfig();
 
+      // Initialize rate limiter
+      this.rateLimiter = new RateLimiter({
+        maxAttempts: 5,
+        windowMs: 15 * 60 * 1000 // 15 minutes
+      });
+
       // Initialize Monite API client
-      this.moniteApiClient = new MoniteApiClient(
-        process.env.MONITE_API_URL || 'https://api.sandbox.monite.com',
-        process.env.MONITE_CLIENT_ID!,
-        process.env.MONITE_CLIENT_SECRET!
-      );
+      this.moniteApiClient = new MoniteApiClient({
+        baseURL: process.env.MONITE_API_URL || 'https://api.sandbox.monite.com',
+        clientId: process.env.MONITE_CLIENT_ID!,
+        clientSecret: process.env.MONITE_CLIENT_SECRET!,
+        timeout: 10000,
+        maxRetries: 3
+      });
 
       // Initialize Monite service
       this.moniteService = new MoniteService(
@@ -56,17 +66,19 @@ export class AuthService {
         process.env.MONITE_CLIENT_SECRET!
       );
 
-      // Initialize Supabase client
-      this.supabaseClient = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!,
-        {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false
-          }
+      // Initialize Supabase client with appropriate key based on environment
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+      const supabaseKey = process.env.NODE_ENV === 'development' 
+        ? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY! 
+        : process.env.SUPABASE_SERVICE_ROLE_KEY!;
+
+      this.supabaseClient = createClient(supabaseUrl, supabaseKey, {
+        auth: {
+          autoRefreshToken: true,
+          persistSession: true,
+          detectSessionInUrl: true
         }
-      );
+      });
     } catch (error) {
       const configError = new Error('Failed to initialize AuthService') as ConfigValidationError;
       configError.code = 'CONFIG_ERROR';
@@ -80,7 +92,8 @@ export class AuthService {
       { key: 'MONITE_API_URL', value: process.env.MONITE_API_URL },
       { key: 'MONITE_CLIENT_ID', value: process.env.MONITE_CLIENT_ID },
       { key: 'MONITE_CLIENT_SECRET', value: process.env.MONITE_CLIENT_SECRET },
-      { key: 'NEXT_PUBLIC_SUPABASE_LOCAL_URL', value: process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL },
+      { key: 'NEXT_PUBLIC_SUPABASE_URL', value: process.env.NEXT_PUBLIC_SUPABASE_URL },
+      { key: 'NEXT_PUBLIC_SUPABASE_ANON_KEY', value: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY },
       { key: 'SUPABASE_SERVICE_ROLE_KEY', value: process.env.SUPABASE_SERVICE_ROLE_KEY }
     ];
 
@@ -100,8 +113,19 @@ export class AuthService {
     return AuthService.instance;
   }
 
+  private async checkRateLimit(identifier: string): Promise<void> {
+    const isLimited = await this.rateLimiter.isRateLimited(identifier);
+    if (isLimited) {
+      const error = new Error('Too many attempts. Please try again later.') as AuthError;
+      error.status = 429;
+      throw error;
+    }
+  }
+
   async signUp(email: string, password: string, name?: string): Promise<AuthSignUpResponse> {
     try {
+      await this.checkRateLimit(`signup:${email}`);
+
       const { data, error } = await this.supabaseClient.auth.signUp({
         email,
         password,
@@ -122,10 +146,11 @@ export class AuthService {
           // Create a Monite entity for the user
           await this.moniteService.createEntity({
             name: name || email.split('@')[0],
+            type: 'individual',
             status: 'active',
             metadata: {
               user_id: data.user.id,
-              email: data.user.email,
+              email: data.user.email || null,
               created_at: new Date().toISOString()
             },
             settings: {
@@ -138,7 +163,9 @@ export class AuthService {
           await this.moniteApiClient.forceTokenRefresh();
         } catch (entityError) {
           // If entity creation fails, delete the user and throw
-          await this.supabaseClient.auth.admin.deleteUser(data.user.id);
+          if (process.env.NODE_ENV === 'development') {
+            await this.supabaseClient.auth.admin.deleteUser(data.user.id);
+          }
           throw entityError;
         }
       }
@@ -154,6 +181,8 @@ export class AuthService {
 
   async signIn(email: string, password: string): Promise<AuthSignInResponse> {
     try {
+      await this.checkRateLimit(`signin:${email}`);
+
       const { data, error } = await this.supabaseClient.auth.signInWithPassword({
         email,
         password,
@@ -190,6 +219,8 @@ export class AuthService {
 
   async resetPassword(email: string): Promise<void> {
     try {
+      await this.checkRateLimit(`reset:${email}`);
+
       const { error } = await this.supabaseClient.auth.resetPasswordForEmail(email, {
         redirectTo: typeof window !== 'undefined' ? `${window.location.origin}/reset-password` : undefined,
       });
@@ -211,8 +242,13 @@ export class AuthService {
       }
 
       if (session) {
-        // Refresh Monite API token when getting current session
-        await this.moniteApiClient.forceTokenRefresh();
+        try {
+          // Refresh Monite API token when getting current session
+          await this.moniteApiClient.forceTokenRefresh();
+        } catch (error) {
+          console.error('Failed to refresh Monite token:', error);
+          // Don't throw here, just log the error
+        }
       }
 
       return session;
@@ -235,47 +271,26 @@ export class AuthService {
     }
   }
 
-  async refreshSession(): Promise<AuthTokenResponse> {
-    try {
-      const { data, error } = await this.supabaseClient.auth.refreshSession();
-
-      if (error) {
-        throw this.handleAuthError(error);
-      }
-
-      if (data.session) {
-        // Refresh Monite API token when refreshing session
-        await this.moniteApiClient.forceTokenRefresh();
-      }
-
-      return {
-        session: data.session,
-        user: data.user
-      };
-    } catch (error) {
-      throw this.handleAuthError(error);
-    }
-  }
-
-  private handleAuthError(error: unknown): Error {
+  private handleAuthError(error: unknown): AuthError {
     if (error instanceof AuthError) {
       return error;
-    } else if (error instanceof Error) {
-      return error;
-    } else {
-      return new Error('An unknown error occurred during authentication');
     }
+
+    const authError = new Error(error instanceof Error ? error.message : 'An unknown error occurred') as AuthError;
+    authError.status = 500;
+    return authError;
   }
 
-  getMoniteService(): MoniteService {
+  // Public getters for services
+  public getSupabaseClient(): SupabaseClient {
+    return this.supabaseClient;
+  }
+
+  public getMoniteService(): MoniteService {
     return this.moniteService;
   }
 
-  getMoniteApiClient(): MoniteApiClient {
+  public getMoniteApiClient(): MoniteApiClient {
     return this.moniteApiClient;
-  }
-
-  getSupabaseClient(): SupabaseClient {
-    return this.supabaseClient;
   }
 }

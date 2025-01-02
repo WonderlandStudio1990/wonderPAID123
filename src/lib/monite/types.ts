@@ -1,13 +1,22 @@
 export interface MoniteEntityCreate {
     name: string;
-    status?: 'active' | 'inactive' | 'suspended';
-    metadata?: Record<string, any>;
-    settings?: Record<string, any>;
+    type: 'individual' | 'organization';
+    status?: 'active' | 'inactive';
+    metadata?: {
+        user_id: string;
+        email: string | null;
+        created_at: string;
+    };
+    settings?: {
+        currency: string;
+        timezone: string;
+    };
 }
 
-export interface MoniteEntity extends MoniteEntityCreate {
+export interface MoniteEntity extends Omit<MoniteEntityCreate, 'status'> {
     id: string;
     monite_entity_id: string;
+    status: 'active' | 'inactive';
     created_at: string;
     updated_at: string;
 }
@@ -45,4 +54,12 @@ export interface MoniteWebhookEvent {
     processed: boolean;
     created_at: string;
     processed_at?: string;
-} 
+}
+
+export interface MoniteApiError extends Error {
+    code: string;
+    status?: number;
+    details?: unknown;
+}
+
+export type CreateEntityParams = MoniteEntityCreate; 

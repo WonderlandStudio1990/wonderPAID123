@@ -1,5 +1,5 @@
 import { MoniteService } from '../lib/monite/service';
-import { MoniteEntityCreate } from '../lib/monite/types';
+import { MoniteEntity, MoniteEntityCreate } from '../lib/monite/types';
 import * as dotenv from 'dotenv';
 import path from 'path';
 
@@ -10,77 +10,54 @@ async function main() {
     try {
         // Initialize MoniteService with environment variables
         const moniteService = new MoniteService(
-            process.env.MONITE_API_URL!,
+            process.env.MONITE_API_URL || 'https://api.sandbox.monite.com',
             process.env.MONITE_CLIENT_ID!,
-            process.env.MONITE_CLIENT_SECRET!,
-            process.env.MONITE_API_VERSION!,
-            process.env.NEXT_PUBLIC_SUPABASE_LOCAL_URL,
-            process.env.NEXT_PUBLIC_SUPABASE_LOCAL_ANON_KEY
+            process.env.MONITE_CLIENT_SECRET!
         );
 
-        // Test user authentication
-        console.log('Authenticating test user...');
-        const testUser = {
-            email: `test${Date.now()}@wonderpaid.com`,
-            password: 'Test123!'
-        };
-
-        try {
-            const data = await moniteService.signInUser(testUser.email, testUser.password);
-            console.log('Signed in existing test user:', data.user?.id);
-            moniteService.setSession(data);
-        } catch (signInError) {
-            console.log('Failed to sign in, creating new user...');
-            try {
-                const data = await moniteService.signUpUser(testUser.email, testUser.password);
-                console.log('Created new test user:', data.user?.id);
-                moniteService.setSession(data);
-            } catch (signUpError: any) {
-                if (signUpError?.code === 'user_already_exists') {
-                    console.log('User already exists, trying to sign in again...');
-                    const data = await moniteService.signInUser(testUser.email, testUser.password);
-                    console.log('Signed in existing test user:', data.user?.id);
-                    moniteService.setSession(data);
-                } else {
-                    throw signUpError;
-                }
-            }
-        }
-
-        if (!moniteService.session?.user?.id) {
-            throw new Error('No user session available');
-        }
-
-        // Create test entity
+        // Create a test entity
         console.log('Creating test entity...');
-        const testEntity: MoniteEntityCreate = {
-            type: 'organization',
-            email: testUser.email,
-            address: {
-                country: 'US',
-                city: 'San Francisco',
-                postal_code: '94105',
-                line1: '123 Test St',
-                state: 'CA'
+        const timestamp = Date.now();
+        const testEntity = await moniteService.createEntity({
+            name: `Test Entity ${timestamp}`,
+            type: 'individual',
+            status: 'active',
+            metadata: {
+                user_id: `test-${timestamp}`,
+                email: `test${timestamp}@wonderpaid.com`,
+                created_at: new Date().toISOString()
             },
-            organization: {
-                legal_name: 'Test Organization',
-                tax_id: '123456789'
+            settings: {
+                currency: 'USD',
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
             }
-        };
+        }) as MoniteEntity;
 
-        const createdEntity = await moniteService.createEntityForUser(
-            moniteService.session.user.id,
-            testEntity
-        );
-        console.log('Created entity:', createdEntity);
+        console.log('Test entity created:', testEntity.id);
 
-        // Get entity for user
-        console.log('Retrieving entity for user...');
-        const retrievedEntity = await moniteService.getEntityForUser(moniteService.session.user.id);
-        console.log('Retrieved entity:', retrievedEntity);
+        // Get the created entity
+        console.log('Fetching test entity...');
+        const fetchedEntity = await moniteService.getEntity(testEntity.id) as MoniteEntity;
+        console.log('Fetched entity:', fetchedEntity.id);
 
-        console.log('Test completed successfully!');
+        // List all entities
+        console.log('Listing all entities...');
+        const { data: entities } = await moniteService.listEntities() as { data: MoniteEntity[] };
+        console.log('Total entities:', entities.length);
+
+        // Update the test entity
+        console.log('Updating test entity...');
+        const updatedEntity = await moniteService.updateEntity(testEntity.id, {
+            name: `Updated Test Entity ${timestamp}`
+        }) as MoniteEntity;
+        console.log('Updated entity name:', updatedEntity.name);
+
+        // Delete the test entity
+        console.log('Deleting test entity...');
+        await moniteService.deleteEntity(testEntity.id);
+        console.log('Test entity deleted');
+
+        console.log('All tests passed!');
     } catch (error) {
         console.error('Test failed:', error);
         process.exit(1);
