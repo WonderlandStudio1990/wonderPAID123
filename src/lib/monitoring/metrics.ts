@@ -1,48 +1,36 @@
-export class Metrics {
-    private apiCalls: Map<string, number>;
-    private apiLatencies: Map<string, number[]>;
+import { monitoringLogger } from './logger';
 
-    constructor() {
-        this.apiCalls = new Map();
-        this.apiLatencies = new Map();
-    }
+export interface Metric {
+  name: string;
+  value: number;
+  tags?: Record<string, string>;
+  timestamp?: number;
+}
 
-    private getKey(path: string, method: string, status?: number): string {
-        return `${method}:${path}${status ? `:${status}` : ''}`;
-    }
+class MetricsCollector {
+  private metrics: Metric[] = [];
 
-    incrementApiCalls(path: string, method: string, status: number): void {
-        const key = this.getKey(path, method, status);
-        const currentCount = this.apiCalls.get(key) || 0;
-        this.apiCalls.set(key, currentCount + 1);
-    }
+  record(metric: Metric) {
+    this.metrics.push({
+      ...metric,
+      timestamp: metric.timestamp || Date.now()
+    });
+    
+    monitoringLogger.info({
+      metric_name: metric.name,
+      metric_value: metric.value,
+      metric_tags: metric.tags
+    }, 'Metric recorded');
+  }
 
-    recordApiLatency(path: string, method: string, duration: number): void {
-        const key = this.getKey(path, method);
-        const latencies = this.apiLatencies.get(key) || [];
-        latencies.push(duration);
-        this.apiLatencies.set(key, latencies);
-    }
+  getMetrics(): Metric[] {
+    return this.metrics;
+  }
 
-    getApiCallCount(path: string, method: string, status?: number): number {
-        const key = this.getKey(path, method, status);
-        return this.apiCalls.get(key) || 0;
-    }
+  clearMetrics() {
+    this.metrics = [];
+  }
+}
 
-    getApiLatencies(path: string, method: string): number[] {
-        const key = this.getKey(path, method);
-        return this.apiLatencies.get(key) || [];
-    }
-
-    getAverageLatency(path: string, method: string): number {
-        const latencies = this.getApiLatencies(path, method);
-        if (latencies.length === 0) return 0;
-        const sum = latencies.reduce((acc, val) => acc + val, 0);
-        return sum / latencies.length;
-    }
-
-    reset(): void {
-        this.apiCalls.clear();
-        this.apiLatencies.clear();
-    }
-} 
+export const metricsCollector = new MetricsCollector();
+export default metricsCollector;
