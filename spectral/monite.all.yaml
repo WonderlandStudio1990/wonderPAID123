@@ -1,0 +1,816 @@
+openapi: 3.0.0
+info:
+  title: Monite API
+  version: 2024-01-31
+  description: Complete Monite API specification
+  contact:
+    name: WonderPAID Support
+    email: support@wonderpaid.com
+    url: https://wonderpaid.com/support
+
+servers:
+  - url: https://api.sandbox.monite.com
+    description: Sandbox environment
+  - url: https://api.monite.com
+    description: Production environment
+
+paths:
+  /v1/auth/token:
+    post:
+      tags: [Authentication]
+      description: Generate an access token using client credentials
+      summary: Get access token
+      operationId: getAccessToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRequest'
+      responses:
+        '200':
+          description: Token generated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  /v1/entities:
+    post:
+      tags: [Entities]
+      description: Create a new entity in Monite
+      summary: Create entity
+      operationId: createEntity
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityCreate'
+      responses:
+        '201':
+          description: Entity created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+
+    get:
+      tags: [Entities]
+      description: List all entities with pagination
+      summary: List entities
+      operationId: listEntities
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: order
+          in: query
+          description: Sort order for results
+          schema:
+            type: string
+            enum: [asc, desc]
+        - name: limit
+          in: query
+          description: Maximum number of results to return
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: pagination_token
+          in: query
+          description: Token for pagination
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of entities retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Entity'
+                  pagination_token:
+                    type: string
+
+  /v1/entities/{entity_id}:
+    parameters:
+      - name: entity_id
+        in: path
+        required: true
+        description: ID of the entity
+        schema:
+          type: string
+    get:
+      tags: [Entities]
+      description: Get details of a specific entity
+      summary: Get entity by ID
+      operationId: getEntity
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Entity details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+
+    patch:
+      tags: [Entities]
+      description: Update an existing entity
+      summary: Update entity
+      operationId: updateEntity
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityUpdate'
+      responses:
+        '200':
+          description: Entity updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+
+    delete:
+      tags: [Entities]
+      description: Delete an entity
+      summary: Delete entity
+      operationId: deleteEntity
+      security:
+        - BearerAuth: []
+      responses:
+        '204':
+          description: Entity deleted successfully
+
+  /v1/roles:
+    post:
+      tags: [Roles]
+      description: Create a new role
+      summary: Create role
+      operationId: createRole
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoniteRole'
+      responses:
+        '201':
+          description: Role created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteRoleResponse'
+
+    get:
+      tags: [Roles]
+      description: List all roles
+      summary: List roles
+      operationId: listRoles
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of roles retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoniteRoleResponse'
+
+  /v1/project/settings:
+    get:
+      tags: [Project Settings]
+      description: Get project settings
+      summary: Get project settings
+      operationId: getProjectSettings
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Project settings retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteProjectSettings'
+
+    patch:
+      tags: [Project Settings]
+      description: Update project settings
+      summary: Update project settings
+      operationId: updateProjectSettings
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoniteProjectSettings'
+      responses:
+        '200':
+          description: Project settings updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteProjectSettings'
+
+  /v1/bank-accounts:
+    post:
+      tags: [Bank Accounts]
+      description: Create a new bank account
+      summary: Create bank account
+      operationId: createBankAccount
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoniteBankAccount'
+      responses:
+        '201':
+          description: Bank account created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteBankAccountResponse'
+
+    get:
+      tags: [Bank Accounts]
+      description: List all bank accounts
+      summary: List bank accounts
+      operationId: listBankAccounts
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of bank accounts retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoniteBankAccountResponse'
+
+  /v1/workflows:
+    post:
+      tags: [Workflows]
+      description: Create a new workflow
+      summary: Create workflow
+      operationId: createWorkflow
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoniteWorkflow'
+      responses:
+        '201':
+          description: Workflow created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteWorkflowResponse'
+
+    get:
+      tags: [Workflows]
+      description: List all workflows
+      summary: List workflows
+      operationId: listWorkflows
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of workflows retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoniteWorkflowResponse'
+
+  /v1/payables:
+    post:
+      tags: [Payables]
+      description: Create a new payable
+      summary: Create payable
+      operationId: createPayable
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitePayableCreate'
+      responses:
+        '201':
+          description: Payable created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MonitePayableResponse'
+
+    get:
+      tags: [Payables]
+      description: List all payables
+      summary: List payables
+      operationId: listPayables
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of payables retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MonitePayableResponse'
+
+  /v1/receivables:
+    post:
+      tags: [Receivables]
+      description: Create a new receivable
+      summary: Create receivable
+      operationId: createReceivable
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoniteReceivableCreate'
+      responses:
+        '201':
+          description: Receivable created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteReceivableResponse'
+
+    get:
+      tags: [Receivables]
+      description: List all receivables
+      summary: List receivables
+      operationId: listReceivables
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of receivables retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoniteReceivableResponse'
+
+  /v1/vat-ids:
+    post:
+      tags: [VAT IDs]
+      description: Create a new VAT ID
+      summary: Create VAT ID
+      operationId: createVatId
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoniteVatId'
+      responses:
+        '201':
+          description: VAT ID created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteVatId'
+
+    get:
+      tags: [VAT IDs]
+      description: List all VAT IDs
+      summary: List VAT IDs
+      operationId: listVatIds
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: List of VAT IDs retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MoniteVatId'
+
+  /v1/entity-settings:
+    get:
+      tags: [Entity Settings]
+      description: Get entity settings
+      summary: Get entity settings
+      operationId: getEntitySettings
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Entity settings retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteEntitySettings'
+
+    patch:
+      tags: [Entity Settings]
+      description: Update entity settings
+      summary: Update entity settings
+      operationId: updateEntitySettings
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoniteEntitySettings'
+      responses:
+        '200':
+          description: Entity settings updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MoniteEntitySettings'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+
+  schemas:
+    TokenRequest:
+      type: object
+      required:
+        - grant_type
+        - client_id
+        - client_secret
+      properties:
+        grant_type:
+          type: string
+          enum: [client_credentials]
+        client_id:
+          type: string
+        client_secret:
+          type: string
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        token_type:
+          type: string
+        expires_in:
+          type: integer
+
+    EntityCreate:
+      type: object
+      required:
+        - type
+        - email
+        - address
+      properties:
+        type:
+          type: string
+          enum: [organization, individual]
+        email:
+          type: string
+          format: email
+        address:
+          $ref: '#/components/schemas/Address'
+        organization:
+          $ref: '#/components/schemas/Organization'
+        individual:
+          $ref: '#/components/schemas/Individual'
+
+    EntityUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        address:
+          $ref: '#/components/schemas/Address'
+        organization:
+          $ref: '#/components/schemas/Organization'
+        individual:
+          $ref: '#/components/schemas/Individual'
+
+    Entity:
+      allOf:
+        - $ref: '#/components/schemas/EntityCreate'
+        - type: object
+          properties:
+            id:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            status:
+              type: string
+              enum: [active, inactive]
+
+    Address:
+      type: object
+      required:
+        - country
+        - city
+        - postal_code
+        - line1
+      properties:
+        country:
+          type: string
+          minLength: 2
+          maxLength: 2
+        city:
+          type: string
+        postal_code:
+          type: string
+        line1:
+          type: string
+        line2:
+          type: string
+        state:
+          type: string
+
+    Organization:
+      type: object
+      required:
+        - legal_name
+      properties:
+        legal_name:
+          type: string
+        tax_id:
+          type: string
+
+    Individual:
+      type: object
+      required:
+        - first_name
+        - last_name
+      properties:
+        first_name:
+          type: string
+        last_name:
+          type: string
+        tax_id:
+          type: string
+
+    MoniteRole:
+      type: object
+      required:
+        - name
+        - permissions
+      properties:
+        name:
+          type: string
+        permissions:
+          type: array
+          items:
+            type: string
+
+    MoniteRoleResponse:
+      allOf:
+        - $ref: '#/components/schemas/MoniteRole'
+        - type: object
+          properties:
+            id:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    MoniteProjectSettings:
+      type: object
+      properties:
+        default_currency:
+          type: string
+        available_currencies:
+          type: array
+          items:
+            type: string
+        vat_id_required:
+          type: boolean
+
+    MoniteBankAccount:
+      type: object
+      required:
+        - iban
+        - account_holder_name
+      properties:
+        iban:
+          type: string
+        bic:
+          type: string
+        bank_name:
+          type: string
+        account_holder_name:
+          type: string
+
+    MoniteBankAccountResponse:
+      allOf:
+        - $ref: '#/components/schemas/MoniteBankAccount'
+        - type: object
+          properties:
+            id:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            status:
+              type: string
+              enum: [active, inactive]
+
+    MoniteWorkflow:
+      type: object
+      required:
+        - name
+        - steps
+      properties:
+        name:
+          type: string
+        steps:
+          type: array
+          items:
+            type: object
+            properties:
+              type:
+                type: string
+              config:
+                type: object
+
+    MoniteWorkflowResponse:
+      allOf:
+        - $ref: '#/components/schemas/MoniteWorkflow'
+        - type: object
+          properties:
+            id:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+
+    MonitePayableCreate:
+      type: object
+      required:
+        - amount
+        - due_date
+        - counterpart_id
+      properties:
+        amount:
+          type: object
+          properties:
+            currency:
+              type: string
+            value:
+              type: number
+        due_date:
+          type: string
+          format: date
+        counterpart_id:
+          type: string
+        description:
+          type: string
+
+    MonitePayableResponse:
+      allOf:
+        - $ref: '#/components/schemas/MonitePayableCreate'
+        - type: object
+          properties:
+            id:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            status:
+              type: string
+              enum: [draft, submitted, approved, paid, canceled]
+
+    MoniteReceivableCreate:
+      type: object
+      required:
+        - amount
+        - due_date
+        - counterpart_id
+      properties:
+        amount:
+          type: object
+          properties:
+            currency:
+              type: string
+            value:
+              type: number
+        due_date:
+          type: string
+          format: date
+        counterpart_id:
+          type: string
+        description:
+          type: string
+
+    MoniteReceivableResponse:
+      allOf:
+        - $ref: '#/components/schemas/MoniteReceivableCreate'
+        - type: object
+          properties:
+            id:
+              type: string
+            created_at:
+              type: string
+              format: date-time
+            updated_at:
+              type: string
+              format: date-time
+            status:
+              type: string
+              enum: [draft, issued, paid, canceled]
+
+    MoniteVatId:
+      type: object
+      required:
+        - country_code
+        - value
+      properties:
+        country_code:
+          type: string
+          minLength: 2
+          maxLength: 2
+        value:
+          type: string
+
+    MoniteEntitySettings:
+      type: object
+      properties:
+        default_currency:
+          type: string
+        vat_id_required:
+          type: boolean
+        approval_required:
+          type: boolean
+
+tags:
+  - name: Authentication
+    description: Operations for authentication and token management
+  - name: Entities
+    description: Operations for managing Monite entities
+  - name: Roles
+    description: Operations for managing roles and permissions
+  - name: Project Settings
+    description: Operations for managing project-wide settings
+  - name: Bank Accounts
+    description: Operations for managing bank accounts
+  - name: Workflows
+    description: Operations for managing workflows
+  - name: Payables
+    description: Operations for managing payables
+  - name: Receivables
+    description: Operations for managing receivables
+  - name: VAT IDs
+    description: Operations for managing VAT IDs
+  - name: Entity Settings
+    description: Operations for managing entity-specific settings 

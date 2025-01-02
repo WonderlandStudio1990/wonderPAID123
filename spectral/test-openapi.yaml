@@ -1,0 +1,181 @@
+openapi: 3.0.0
+info:
+  title: WonderPAID Test API
+  version: 1.0.0
+  description: API for testing Monite integration
+  contact:
+    name: WonderPAID Support
+    email: support@wonderpaid.com
+    url: https://wonderpaid.com/support
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+  - url: https://api.wonderpaid.com
+    description: Production server
+
+paths:
+  /api/monite/test:
+    post:
+      tags: [Testing]
+      description: Test the Monite integration by creating a user and entity
+      summary: Test Monite integration
+      operationId: testMoniteIntegration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User's email address
+                password:
+                  type: string
+                  minLength: 8
+                  description: User's password
+                entityData:
+                  $ref: '#/components/schemas/EntityData'
+      responses:
+        '200':
+          description: Test completed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                    description: Whether the test was successful
+                  entity:
+                    $ref: '#/components/schemas/Entity'
+        '400':
+          description: Invalid request parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Server error occurred
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    EntityData:
+      type: object
+      required:
+        - type
+        - email
+        - registered_address
+      properties:
+        type:
+          type: string
+          enum: [organization, individual]
+          description: Type of entity to create
+        email:
+          type: string
+          format: email
+          description: Entity's email address
+        registered_address:
+          type: object
+          required:
+            - country
+            - city
+            - postal_code
+            - line1
+          properties:
+            country:
+              type: string
+              minLength: 2
+              maxLength: 2
+              description: Two-letter country code
+            city:
+              type: string
+              description: City name
+            postal_code:
+              type: string
+              description: Postal code
+            line1:
+              type: string
+              description: First line of address
+            line2:
+              type: string
+              description: Second line of address (optional)
+            state:
+              type: string
+              description: State or province (optional)
+        organization:
+          type: object
+          properties:
+            legal_name:
+              type: string
+              description: Legal name of the organization
+            tax_id:
+              type: string
+              description: Tax ID of the organization
+        individual:
+          type: object
+          properties:
+            first_name:
+              type: string
+              description: First name of the individual
+            last_name:
+              type: string
+              description: Last name of the individual
+            tax_id:
+              type: string
+              description: Tax ID of the individual
+
+    Entity:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier of the entity
+        type:
+          type: string
+          enum: [organization, individual]
+          description: Type of the entity
+        email:
+          type: string
+          description: Email address of the entity
+        status:
+          type: string
+          enum: [active, inactive]
+          description: Current status of the entity
+        created_at:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updated_at:
+          type: string
+          format: date-time
+          description: Last update timestamp
+
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Error message
+        details:
+          type: object
+          description: Additional error details
+
+tags:
+  - name: Testing
+    description: Operations for testing the Monite integration 
